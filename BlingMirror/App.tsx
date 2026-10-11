@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
-  Modal, TextInput, Button, Alert, ActivityIndicator, ScrollView
+  Modal, TextInput, Button, Alert, ActivityIndicator, ScrollView, RefreshControl
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -499,6 +499,9 @@ function WardrobeScreen({ username }: { username: string }) {
 function OutfitScreen({ username }: { username: string }) {
   const [weather, setWeather] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [locationFallback, setLocationFallback] = useState(false);
+  const [weatherDomesticOnly, setWeatherDomesticOnly] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [aiRecommendation, setAiRecommendation] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [outfit, setOutfit] = useState<{
@@ -518,19 +521,48 @@ function OutfitScreen({ username }: { username: string }) {
   const styleOptions = ['简约', '通勤', '法式', '休闲', '运动', '复古', '甜美', '街头','日系','韩系'];
   const sceneOptions = ['日常', '通勤', '约会', '运动', '旅行', '聚会', '居家'];
 
+  // 默认降级城市（北京）
+  const FALLBACK_LOCATION = { lat: 39.90, lon: 116.40 };
+
+  // 获取实时定位：成功返回真实坐标；权限拒绝/超时/异常降级到北京
+  const getLocation = async (): Promise<{ lat: number; lon: number; isFallback: boolean }> => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('定位权限未授予，使用默认城市（北京）');
+        return { ...FALLBACK_LOCATION, isFallback: true };
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        timeout: 8000,
+      });
+      const { latitude, longitude } = pos.coords;
+      if (!latitude || !longitude) return { ...FALLBACK_LOCATION, isFallback: true };
+      return { lat: latitude, lon: longitude, isFallback: false };
+    } catch (e) {
+      console.warn('获取定位失败，使用默认城市（北京）', e);
+      return { ...FALLBACK_LOCATION, isFallback: true };
+    }
+  };
+
   // 获取天气（独立函数）
-  const fetchWeather = async (lat: number, lon: number) => {
+  const fetchWeather = async (lat: number, lon: number, isFallback: boolean = false) => {
     try {
       const weatherRes = await axios.get(`${API_BASE_URL}/weather`, {
         params: { lat, lon }
       });
       if (weatherRes.data && !weatherRes.data.error) {
         setWeather(weatherRes.data);
+        setWeatherDomesticOnly(false);
       } else {
         console.warn('天气接口返回错误', weatherRes.data);
+        setWeather(null);
+        setWeatherDomesticOnly(!isFallback);
       }
     } catch (weatherError) {
       console.error('天气请求失败:', weatherError);
+      setWeather(null);
+      setWeatherDomesticOnly(!isFallback);
     }
   };
 
@@ -552,13 +584,12 @@ function OutfitScreen({ username }: { username: string }) {
     });
   };
 
-  // 加载天气和衣橱数据（固定坐标，避免定位问题）
+  // 加载天气和衣橱数据（实时定位，失败降级到默认城市）
   const loadWeatherAndClothes = async () => {
     try {
-      // 固定使用成都坐标，你也可以改为自己的城市
-      const fixedLat = 30.67;
-      const fixedLon = 104.06;
-      await fetchWeather(fixedLat, fixedLon);
+      const { lat, lon, isFallback } = await getLocation();
+      setLocationFallback(isFallback);
+      await fetchWeather(lat, lon, isFallback);
 
       // 读取衣橱
       const stored = await AsyncStorage.getItem(getUserClothesKey(username));
@@ -584,6 +615,13 @@ function OutfitScreen({ username }: { username: string }) {
     } else {
       Alert.alert('提示', '衣橱为空，请先添加衣物');
     }
+  };
+
+  // 下拉刷新：重新获取定位与天气
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadWeatherAndClothes();
+    setRefreshing(false);
   };
 
   // AI 推荐函数
@@ -876,12 +914,29 @@ const handleMultiTryOn = async () => {
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={true}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#FF69B4']}
+          tintColor="#FF69B4"
+        />
+      }
     >
       {weather && (
         <View style={styles.weatherCard}>
           <Text style={styles.temp}>{Math.round(weather.temp)}°C</Text>
           <Text style={styles.desc}>{weather.description}</Text>
           <Text style={styles.advice}>✨ {weather.advice}</Text>
+        </View>
+      )}
+      {locationFallback && (
+        <Text style={styles.weatherHint}>📍 定位失败，已使用默认城市（北京）</Text>
+      )}
+      {!weather && weatherDomesticOnly && (
+        <View style={styles.weatherCard}>
+          <Text style={styles.desc}>🌏 仅支持国内天气</Text>
+          <Text style={styles.weatherHint}>当前位置暂无天气数据</Text>
         </View>
       )}
 
@@ -1238,6 +1293,7 @@ function ProfileScreen({ username, onLogout }: { username: string; onLogout: () 
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Text style={styles.logoutText}>退出登录</Text>
           </TouchableOpacity>
+          <Text style={styles.privacyNote}>📍 我们会在您授权后获取定位，用于提供当地天气与穿搭建议，位置仅发送至天气服务。</Text>
         </View>
 
         {/* 压箱底衣物区块 */}
@@ -2027,4 +2083,17 @@ wardrobeLabel: {
     marginTop: 10,
   },
   logoutText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
+  privacyNote: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 10,
+  },
+  weatherHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });
