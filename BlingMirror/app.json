@@ -27,14 +27,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "用于获取您所在城市的实时天气与穿搭建议"
-        }
-      ]
-    ],
     "extra": {
       "eas": {
         "projectId": "27fd02c7-a7d7-4ce3-a577-499d530b2c04"
