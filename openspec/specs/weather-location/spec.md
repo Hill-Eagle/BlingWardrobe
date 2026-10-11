@@ -1,64 +1,69 @@
-## ADDED Requirements
+# weather-location Specification
+
+## Purpose
+TBD - created by archiving change weather-realtime-location. Update Purpose after archive.
+
+## Requirements
 
 ### Requirement: 实时定位获取天气
-搭配页天气必须基于设备实时地理位置获取，而非写死坐标。
+搭配页天气 SHALL 基于设备实时地理位置获取，而非写死坐标。
 
-**Scenario: 授权且定位成功**
+#### Scenario: 授权且定位成功
 - Given 用户已授权定位权限且设备可获取位置
 - When 进入搭配页或触发刷新
 - Then 系统使用设备实时经纬度请求天气
 - And 天气卡片展示该坐标对应的天气
 
-**Scenario: 坐标顺序正确**
+#### Scenario: 坐标顺序正确
 - Given 系统获取到的设备坐标
 - When 向后端 `/weather` 发起请求
 - Then 经纬度以 `lon,lat` 顺序传递（符合高德要求）
 
 ### Requirement: 定位降级
-当定位不可用或超时，系统必须降级到默认城市（北京，39.90, 116.40），保证天气卡片始终有数据。
+当定位不可用或超时，系统 SHALL 降级到默认城市（北京，39.90, 116.40），保证天气卡片始终有数据。
 
-**Scenario: 用户拒绝定位权限**
+#### Scenario: 用户拒绝定位权限
 - Given 用户拒绝定位授权
 - When 进入搭配页
 - Then 使用默认城市（北京）坐标请求天气
 - And 不阻塞界面加载
 
-**Scenario: 定位超时或异常**
+#### Scenario: 定位超时或异常
 - Given 定位请求超过设定超时时间或抛出异常
 - When 获取位置时
 - Then 降级到默认城市坐标
 - And 不再无限等待
 
 ### Requirement: 降级提示
-当使用了降级坐标，系统必须在天气卡片明确告知用户，避免误以为天气准确。
+当使用了降级坐标，系统 SHALL 在天气卡片明确告知用户，避免误以为天气准确。
 
-**Scenario: 降级生效时可见提示**
+#### Scenario: 降级生效时可见提示
 - Given 天气因定位失败而使用默认城市
 - When 天气卡片渲染
 - Then 卡片显示「定位失败，已使用默认城市」类提示
 
 ### Requirement: 手动刷新天气
-用户必须能主动重新获取天气，解决冷启动 GPS 未就绪与换城市不更新的问题。
+用户 MUST 能主动重新获取天气，解决冷启动 GPS 未就绪与换城市不更新的问题。
 
-**Scenario: 触发刷新**
+#### Scenario: 触发刷新
 - Given 用户停留在搭配页
 - When 触发刷新（下拉或按钮）
 - Then 重新获取定位与天气
 - And 刷新期间有加载反馈
 
 ### Requirement: 海外/非覆盖区处理
-当真实坐标位于高德不支持的区域导致天气数据为空时，系统必须给出说明而非静默无卡片。
+当真实坐标位于高德不支持的区域导致天气数据为空时，系统 SHALL 给出说明而非静默无卡片。
 
-**Scenario: 海外坐标无天气数据**
+#### Scenario: 海外坐标无天气数据
 - Given 设备位于高德天气未覆盖的区域
 - When 后端返回空天气数据
 - Then 界面提示「仅支持国内天气」或等价说明
 - And 不展示错误的天气数值
 
 ### Requirement: 定位隐私告知
-真实位置会上传至远端后端，系统应在合适位置（如「我的」页或首次进入）告知用户位置用途。
+真实位置会上传至远端后端，系统 SHALL 在合适位置（如「我的」页或首次进入）告知用户位置用途。
 
-**Scenario: 隐私说明可见**
+#### Scenario: 隐私说明可见
 - Given 应用将使用实时定位
 - When 用户查看相关说明
 - Then 能看到位置用于获取天气与穿搭建议的告知
