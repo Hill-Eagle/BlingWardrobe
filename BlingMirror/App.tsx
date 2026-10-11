@@ -552,13 +552,32 @@ function OutfitScreen({ username }: { username: string }) {
     });
   };
 
-  // 加载天气和衣橱数据（固定坐标，避免定位问题）
+  // 获取实时定位：成功返回真实经纬度，权限拒绝/失败则降级到默认城市（成都）
+  const getLocation = async (): Promise<{ lat: number; lon: number }> => {
+    const fallback = { lat: 30.67, lon: 104.06 }; // 成都
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('定位权限未授予，使用默认城市（成都）');
+        return fallback;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = pos.coords;
+      if (!latitude || !longitude) return fallback;
+      return { lat: latitude, lon: longitude };
+    } catch (e) {
+      console.warn('获取定位失败，使用默认城市（成都）', e);
+      return fallback;
+    }
+  };
+
+  // 加载天气和衣橱数据（实时定位，失败降级到默认城市）
   const loadWeatherAndClothes = async () => {
     try {
-      // 固定使用成都坐标，你也可以改为自己的城市
-      const fixedLat = 30.67;
-      const fixedLon = 104.06;
-      await fetchWeather(fixedLat, fixedLon);
+      const { lat, lon } = await getLocation();
+      await fetchWeather(lat, lon);
 
       // 读取衣橱
       const stored = await AsyncStorage.getItem(getUserClothesKey(username));
